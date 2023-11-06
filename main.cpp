@@ -1,59 +1,53 @@
 # include <iostream>
 # include <b15f/b15f.h>
 
-// Assuming that B15F is initialized and available as b15f
+// Define the states (You would need to define these constants)
+constexpr uint8_t STATE_A = 0x01; // Example state A
+constexpr uint8_t STATE_B = 0x02; // Example state B
 
-// Define the bit patterns for the chaser light
-constexpr uint16_t CHASER_FORWARD = 0x0001; // Start with the first light
-constexpr uint16_t CHASER_BACKWARD = 0x8000; // Start with the last light
+B15F& drv = B15F::getInstance();
 
 void runStateA() {
-    uint16_t inputs = 0;
-    for (int i = 0; i < 16; ++i) {
-        if (b15f.digitalRead0() & (1 << i)) {  // Read each digital input
-            inputs |= (1 << i); // Set the corresponding bit in inputs
-        }
+    // Read all inputs as a single byte
+    uint8_t inputs = drv.digitalRead0();
+    // Reverse the bits
+    uint8_t reversedInputs = ~inputs; // bitwise NOT operation to reverse the bits
+    // Write reversed inputs to outputs
+    drv.digitalWrite0(reversedInputs);
+}
+
+void runChaserPattern(uint8_t &pattern, bool &direction) {
+    drv.digitalWrite0(pattern); // Update LEDs
+
+    // Move the light
+    if (direction) {
+        pattern <<= 1; // Shift left
+    } else {
+        pattern >>= 1; // Shift right
     }
-    inputs = ~inputs; // Reverse the bits
-    for (int i = 0; i < 16; ++i) {
-        if (inputs & (1 << i)) {
-            b15f.digitalWrite1(1 << i); // Set the digital output
-        } else {
-            b15f.digitalWrite0(1 << i); // Clear the digital output
-        }
+
+    // Change direction if we hit either end
+    if (pattern == 0x80) { // If the pattern is at the last LED
+        direction = false; // Start shifting right
+    } else if (pattern == 0x01) { // If the pattern is back at the first LED
+        direction = true; // Start shifting left
     }
 }
 
 void runStateB() {
-    // Assuming some delay function is available
-    extern void delay(unsigned int milliseconds);
 
-    uint16_t pattern = CHASER_FORWARD;
-    bool direction = true; // true for forward, false for backward
+    uint8_t pattern = 0x01; // Start with the first LED
+    bool direction = true; // Start by moving to the right
 
-    for (int i = 0; i < 32; ++i) { // Run the chaser pattern 32 times
-        for (int j = 0; j < 16; ++j) {
-            if (pattern & (1 << j)) {
-                b15f.digitalWrite1(1 << j); // Turn on the LED
-            } else {
-                b15f.digitalWrite0(1 << j); // Turn off the LED
-            }
-        }
-        // Update the pattern
-        if (direction) {
-            pattern <<= 1; // Move the light forward
-            if (pattern == CHASER_BACKWARD) direction = false;
-        } else {
-            pattern >>= 1; // Move the light backward
-            if (pattern == CHASER_FORWARD) direction = true;
-        }
-        delay(100); // Delay to control the speed of the chaser light
+    for (int i = 0; i < 16; ++i) { // Run the chaser pattern
+        runChaserPattern(pattern, direction);
+        drv.delay_ms(30);
     }
 }
 
 void processInputsAndOutputs() {
     // Read DIP switch state
-    uint8_t dipSwitchState = b15f.readDipSwitch();
+    uint8_t dipSwitchState = drv.readDipSwitch();
 
     if (dipSwitchState == STATE_A) {
         runStateA();
@@ -63,9 +57,11 @@ void processInputsAndOutputs() {
 }
 
 int main() {
-    B15F b15f; // Initialize your B15F object
+    // Main loop
     while (true) {
         processInputsAndOutputs();
-        // Add a delay or other functionality if needed
+        // Add other functionalities if needed
     }
+
+    return 0;
 }
